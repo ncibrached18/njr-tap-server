@@ -1,43 +1,78 @@
-const TelegramBot = require('node-telegram-bot-api');
-const express = require('express');
-const bodyParser = require('body-parser');
+const TelegramBot = require("node-telegram-bot-api");
+const admin = require("firebase-admin");
 
-const token = "8267583139:AAGleIsF0fXHmfYxkuB9hYnNkYE-H-FwYrY";
-const bot = new TelegramBot(token, { polling: true });
+// ===== Firebase Init =====
+const serviceAccount = require("./firebaseKey.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+const db = admin.firestore();
 
 // ===== Telegram Bot =====
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "ابدأ اللعب 👇", {
+const token = "PUT_YOUR_NEW_TOKEN_HERE";
+const bot = new TelegramBot(token, { polling: true });
+
+// ===== /start =====
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  // إنشاء المستخدم إذا لم يكن موجود
+  const ref = db.collection("users").doc(String(userId));
+  const doc = await ref.get();
+
+  if (!doc.exists) {
+    await ref.set({
+      points: 0,
+      createdAt: Date.now(),
+    });
+  }
+
+  bot.sendMessage(chatId, "ابدأ اللعب 👇", {
     reply_markup: {
-      inline_keyboard: [[
-        {
-          text: "▶️ START TAPPING",
-          web_app: {
-            url: "https://ncibrached18.github.io/njrbottelegrame/"
-          }
-        }
-      ]]
-    }
+      inline_keyboard: [
+        [
+          {
+            text: "▶️ START TAPPING",
+            web_app: {
+              url: "https://ncibrached18.github.io/njrbottelegrame/",
+            },
+          },
+        ],
+      ],
+    },
   });
 });
 
-// ===== HTTP Server =====
-const app = express();
-app.use(bodyParser.json());
+// ===== Receive WebApp Data =====
+bot.on("message", async (msg) => {
+  if (!msg.web_app_data) return;
 
-app.post('/tap', (req, res) => {
-  const { user_id, points } = req.body;
+  const data = JSON.parse(msg.web_app_data.data);
+  const userId = msg.from.id;
+  const earnedPoints = data.points;
 
-  console.log("🎯 TAP RECEIVED");
-  console.log("User:", user_id);
-  console.log("Points:", points);
+  const ref = db.collection("users").doc(String(userId));
+  const doc = await ref.get();
 
-  res.send({ status: "ok" });
+  let totalPoints = earnedPoints;
+
+  if (doc.exists) {
+    totalPoints += doc.data().points;
+  }
+
+  await ref.set(
+    {
+      points: totalPoints,
+      updatedAt: Date.now(),
+    },
+    { merge: true }
+  );
+
+  bot.sendMessage(
+    msg.chat.id,
+    `💰 ربحت ${earnedPoints} نقطة\n📊 مجموعك الآن: ${totalPoints}`
+  );
 });
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("🌍 Server running on port", PORT);
-});
-
