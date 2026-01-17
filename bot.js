@@ -11,7 +11,7 @@ admin.initializeApp({
 const db = admin.firestore();
 
 // ===== Telegram Bot =====
-const token = "PUT_YOUR_NEW_TOKEN_HERE";
+const token = "8267583139:AAGleIsF0fXHmfYxkuB9hYnNkYE-H-FwYrY";
 const bot = new TelegramBot(token, { polling: true });
 
 // ===== /start =====
@@ -47,8 +47,8 @@ bot.onText(/\/start/, async (msg) => {
 });
 
 // ===== Receive WebApp Data =====
-bot.on("message", async (msg) => {
-  if (!msg.web_app_data) return;
+bot.on("web_app_data", async (msg) => {
+  console.log("📩 WebApp data received");
 
   const data = JSON.parse(msg.web_app_data.data);
   const userId = msg.from.id;
@@ -58,7 +58,6 @@ bot.on("message", async (msg) => {
   const doc = await ref.get();
 
   let totalPoints = earnedPoints;
-
   if (doc.exists) {
     totalPoints += doc.data().points;
   }
