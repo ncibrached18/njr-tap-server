@@ -1,8 +1,14 @@
 const TelegramBot = require("node-telegram-bot-api");
+const express = require("express");
+const bodyParser = require("body-parser");
 const admin = require("firebase-admin");
 
-// ===== Firebase Init =====
-const serviceAccount = require("./firebaseKey.json");
+// ===== Telegram =====
+const token = "8267583139:AAGleIsF0fXHmfYxkuB9hYnNkYE-H-FwYrY";
+const bot = new TelegramBot(token, { polling: true });
+
+// ===== Firebase =====
+const serviceAccount = require("./serviceAccountKey.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -10,68 +16,59 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// ===== Telegram Bot =====
-const token = "8267583139:AAGleIsF0fXHmfYxkuB9hYnNkYE-H-FwYrY";
-const bot = new TelegramBot(token, { polling: true });
-
-// ===== /start =====
+// ===== Start =====
 bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
+  const userId = msg.from.id.toString();
 
-  // إنشاء المستخدم إذا لم يكن موجود
-  const ref = db.collection("users").doc(String(userId));
-  const doc = await ref.get();
+  // إنشاء المستخدم لو غير موجود
+  const userRef = db.collection("users").doc(userId);
+  const doc = await userRef.get();
 
   if (!doc.exists) {
-    await ref.set({
+    await userRef.set({
       points: 0,
       createdAt: Date.now(),
+      username: msg.from.username || "",
     });
   }
 
-  bot.sendMessage(chatId, "ابدأ اللعب 👇", {
+  bot.sendMessage(msg.chat.id, "ابدأ اللعب 👇", {
     reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "▶️ START TAPPING",
-            web_app: {
-              url: "https://ncibrached18.github.io/njrbottelegrame/",
-            },
-          },
-        ],
-      ],
-    },
+      inline_keyboard: [[
+        {
+          text: "▶️ START TAPPING",
+          web_app: {
+            url: "https://ncibrached18.github.io/njrbottelegrame/"
+          }
+        }
+      ]]
+    }
   });
 });
 
-// ===== Receive WebApp Data =====
-bot.on("web_app_data", async (msg) => {
+// ===== WebApp Data (🔥 الأهم 🔥) =====
+bot.on("message", async (msg) => {
+  if (!msg.web_app_data) return;
+
   console.log("📩 WebApp data received");
 
   const data = JSON.parse(msg.web_app_data.data);
-  const userId = msg.from.id;
-  const earnedPoints = data.points;
+  const userId = msg.from.id.toString();
+  const points = data.points;
 
-  const ref = db.collection("users").doc(String(userId));
-  const doc = await ref.get();
+  const userRef = db.collection("users").doc(userId);
 
-  let totalPoints = earnedPoints;
-  if (doc.exists) {
-    totalPoints += doc.data().points;
-  }
+  await userRef.update({
+    points: admin.firestore.FieldValue.increment(points),
+  });
 
-  await ref.set(
-    {
-      points: totalPoints,
-      updatedAt: Date.now(),
-    },
-    { merge: true }
-  );
+  bot.sendMessage(msg.chat.id, `✅ تمت إضافة ${points} نقطة`);
+});
 
-  bot.sendMessage(
-    msg.chat.id,
-    `💰 ربحت ${earnedPoints} نقطة\n📊 مجموعك الآن: ${totalPoints}`
-  );
+// ===== Server (اختياري) =====
+const app = express();
+app.use(bodyParser.json());
+
+app.listen(3000, () => {
+  console.log("🌍 Server running on port 3000");
 });
